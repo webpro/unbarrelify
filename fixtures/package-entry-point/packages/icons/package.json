@@ -1,0 +1,8 @@
+{
+  "name": "@test/icons",
+  "version": "1.0.0",
+  "exports": {
+    ".": "./gen/index.ts",
+    "./utils": "./gen/utils.ts"
+  }
+}

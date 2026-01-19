@@ -1,0 +1,7 @@
+{
+  "name": "package-entry-point-fixture",
+  "private": true,
+  "workspaces": [
+    "packages/*"
+  ]
+}

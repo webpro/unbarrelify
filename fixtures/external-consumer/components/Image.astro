@@ -1,0 +1,8 @@
+---
+import { AstroError, AstroErrorData } from '../src/errors/index.ts';
+
+if (!Astro.props.src) {
+  throw new AstroError(AstroErrorData.InvalidConfig);
+}
+---
+<img src={Astro.props.src} />

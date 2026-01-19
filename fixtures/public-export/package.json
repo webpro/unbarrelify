@@ -1,0 +1,6 @@
+{
+  "name": "public-export-test",
+  "exports": {
+    ".": "./src/index.ts"
+  }
+}

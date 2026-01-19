@@ -1,0 +1,469 @@
+import { isAbsolute } from "node:path";
+import type ts from "typescript";
+import { analyzeFile } from "./analyzer.ts";
+import { getExtensionFromSpecifier, tryMapToAlias } from "./config.ts";
+import {
+  createImportDeclaration,
+  createNsImportDeclaration,
+  createReExportDeclaration,
+  createUnsafeNamespaceDeclaration,
+} from "./factory.ts";
+import { isBarrel } from "./main.ts";
+import { organizeImports } from "./organize.ts";
+import { printNode } from "./printer.ts";
+import { buildSpecifier } from "./resolver.ts";
+import type {
+  Context,
+  ExportData,
+  ExportMap,
+  File,
+  ImportData,
+  Name,
+  PathAliases,
+  Rewrite,
+  Rewrites,
+  RewritesByPosition,
+} from "./types.ts";
+import { isIgnoredPath } from "./constants.ts";
+
+export interface RewriteContext {
+  ext?: string;
+  aliases?: PathAliases | null;
+  organizeImports?: boolean;
+  singleQuote?: boolean;
+}
+
+export function buildRewriteItem(
+  name: Name,
+  importItem: ImportData,
+  exportItem: ExportData,
+  originalImportedName?: string,
+): Rewrite {
+  const isAliasedDefault = exportItem.aliasedDefaults?.has(name.name);
+  const isDirectDefault = name.name === "default";
+  const isTracingAliasedDefault = originalImportedName !== undefined;
+  const isDefault = isAliasedDefault || isDirectDefault || isTracingAliasedDefault;
+
+  let defaultName: string | undefined;
+  if (isDefault) {
+    if (isAliasedDefault) {
+      defaultName = name.name;
+    } else if (originalImportedName) {
+      defaultName = originalImportedName;
+    } else if (isDirectDefault) {
+      defaultName = name.alias ?? importItem.name;
+    }
+  }
+
+  return {
+    type: importItem.type === "export" ? "export" : "import",
+    ns: isDefault ? undefined : importItem.name,
+    named: isDefault ? [] : [name],
+    members: importItem.type === "ns" && !isDefault ? [{ name: name.name }] : [],
+    externalSpecifier: exportItem.externalSpecifier,
+    reExportedNs: exportItem.reExportedNs,
+    defaultName,
+    originalSpecifier: importItem.originalSpecifier,
+    specifierPrefix: importItem.specifierPrefix,
+    specifierSuffix: importItem.specifierSuffix,
+  };
+}
+
+export function reverseRewritesByPos(rewrites: Rewrites): RewritesByPosition {
+  return [...rewrites.entries()]
+    .map(([pos, item]) => {
+      const [start, end] = pos.split(":").map(Number) as [number, number];
+      return [[start, end], item] as RewritesByPosition[number];
+    })
+    .sort((a, b) => b[0][0] - a[0][0]);
+}
+
+export function applyRewrites(
+  sourceFile: ts.SourceFile,
+  rewrites: Rewrites,
+  filePath: string,
+  ctx: RewriteContext = {},
+): string {
+  let content = sourceFile.text;
+  const singleQuote = ctx.singleQuote ?? false;
+
+  for (const [[start, end], rewriteMap] of reverseRewritesByPos(rewrites)) {
+    const replacements: string[] = [];
+    let unsafeNsName: string | undefined;
+    const unsafeNsIdentifiers: string[] = [];
+
+    for (const [targetFilePath, rewrite] of rewriteMap) {
+      const baseSpecifier =
+        rewrite.externalSpecifier ??
+        buildSpecifier(filePath, targetFilePath, {
+          ext: ctx.ext,
+          originalSpecifier: rewrite.originalSpecifier,
+          aliases: ctx.aliases,
+        });
+      const specifier = (rewrite.specifierPrefix ?? "") + baseSpecifier + (rewrite.specifierSuffix ?? "");
+
+      if (rewrite.unsafeNsName) {
+        unsafeNsName = rewrite.unsafeNsName;
+        for (const name of rewrite.named) {
+          unsafeNsIdentifiers.push(name.alias ?? name.name);
+        }
+      }
+
+      if (rewrite.reExportedNs) {
+        replacements.push(
+          printNode(createNsImportDeclaration(specifier, rewrite.reExportedNs, singleQuote), sourceFile),
+        );
+      } else if (rewrite.type === "import") {
+        replacements.push(printNode(createImportDeclaration(rewrite, specifier, singleQuote), sourceFile));
+      } else {
+        replacements.push(printNode(createReExportDeclaration(rewrite, specifier, singleQuote), sourceFile));
+      }
+    }
+
+    if (unsafeNsName && unsafeNsIdentifiers.length > 0) {
+      replacements.push(printNode(createUnsafeNamespaceDeclaration(unsafeNsName, unsafeNsIdentifiers), sourceFile));
+    }
+
+    const replacement = replacements.join("\n");
+    content = content.slice(0, start) + replacement + content.slice(end);
+  }
+
+  return ctx.organizeImports ? organizeImports(content, filePath) : content;
+}
+
+function isNameExported(name: Name, exportItem: ExportData): boolean {
+  if (exportItem.exportedNames.size === 0) {
+    return !!exportItem.externalSpecifier;
+  }
+  if (exportItem.exportedNames.has(name.name)) return true;
+  if (exportItem.aliasedDefaults?.has(name.name)) return true;
+  if (exportItem.reExportedNs === name.name) return true;
+  if (exportItem.exportedAsDefault === name.name) return true;
+
+  if (name.name === "default" && exportItem.aliasedDefaults) {
+    return [...exportItem.aliasedDefaults.values()].includes("default");
+  }
+
+  return false;
+}
+
+const addedNamesPerPosition = new Map<string, Set<string>>();
+
+function addRewrite(
+  name: Name,
+  importItem: ImportData,
+  exportItem: ExportData,
+  targetFilePath: string,
+  rewrites: Rewrites,
+  originalImportedName?: string,
+): boolean {
+  if (!isNameExported(name, exportItem)) return false;
+
+  const pos = `${importItem.pos.start}:${importItem.pos.end}`;
+
+  let addedNames = addedNamesPerPosition.get(pos);
+  if (!addedNames) {
+    addedNames = new Set();
+    addedNamesPerPosition.set(pos, addedNames);
+  }
+
+  const nameKey = `${originalImportedName ?? name.name}:${name.alias ?? ""}`;
+  if (addedNames.has(nameKey)) {
+    return false;
+  }
+  addedNames.add(nameKey);
+
+  let posRewrites = rewrites.get(pos);
+
+  if (!posRewrites) {
+    posRewrites = new Map();
+    rewrites.set(pos, posRewrites);
+  }
+
+  const existing = posRewrites.get(targetFilePath);
+  if (!existing) {
+    posRewrites.set(targetFilePath, buildRewriteItem(name, importItem, exportItem, originalImportedName));
+  } else {
+    if (importItem.type === "ns") {
+      existing.members.push({ name: name.name });
+    } else {
+      existing.named.push(name);
+    }
+    if (exportItem.reExportedNs) {
+      existing.reExportedNs = exportItem.reExportedNs;
+    }
+  }
+
+  return true;
+}
+
+async function traceExport(
+  name: Name,
+  importItem: ImportData,
+  exports: ExportMap | undefined,
+  rewrites: Rewrites,
+  ctx: Context,
+  originalImportedName?: string,
+): Promise<boolean> {
+  if (!exports) return false;
+
+  const isDefaultImport = name.name === "default" || originalImportedName !== undefined;
+  let foundAny = false;
+
+  for (const [targetFilePath, exportItem] of exports) {
+    if (!isAbsolute(targetFilePath)) {
+      if (exportItem.exportedNames.size === 0 || exportItem.exportedNames.has(name.name)) {
+        if (addRewrite(name, importItem, exportItem, targetFilePath, rewrites, originalImportedName)) {
+          if (isDefaultImport) return true;
+          foundAny = true;
+        }
+      }
+      continue;
+    }
+
+    if (exportItem.externalSpecifier) {
+      if (exportItem.exportedNames.size === 0 || exportItem.exportedNames.has(name.name)) {
+        if (addRewrite(name, importItem, exportItem, exportItem.externalSpecifier, rewrites, originalImportedName)) {
+          if (isDefaultImport) return true;
+          foundAny = true;
+        }
+      }
+      continue;
+    }
+
+    if (isIgnoredPath(targetFilePath, ctx.base)) continue;
+
+    const isAliasedDefault = exportItem.aliasedDefaults?.has(name.name);
+    const isExportedAsDefault = name.name === "default" && exportItem.exportedAsDefault;
+
+    let effectiveName: Name;
+    let effectiveOriginalName: string | undefined;
+
+    if (isAliasedDefault) {
+      effectiveName = { name: "default" };
+      effectiveOriginalName = originalImportedName ?? name.name;
+    } else if (isExportedAsDefault && exportItem.exportedAsDefault) {
+      effectiveName = { name: exportItem.exportedAsDefault };
+      effectiveOriginalName = undefined;
+    } else {
+      effectiveName = name;
+      effectiveOriginalName = originalImportedName;
+    }
+
+    const targetFile = await analyzeFile(targetFilePath, ctx);
+
+    if (!targetFile.isBarrel) {
+      if (addRewrite(effectiveName, importItem, exportItem, targetFilePath, rewrites, effectiveOriginalName)) {
+        if (isDefaultImport) return true;
+        foundAny = true;
+        continue;
+      }
+    } else if (ctx.only.length === 0) {
+      ctx.tracker.register(targetFilePath);
+    }
+
+    const found = await traceExport(
+      effectiveName,
+      importItem,
+      targetFile.exports,
+      rewrites,
+      ctx,
+      effectiveOriginalName,
+    );
+    if (found) {
+      if (isDefaultImport) return true;
+      foundAny = true;
+    }
+  }
+
+  return foundAny;
+}
+
+export async function buildRewrites(analysis: File, filePath: string, ctx: Context): Promise<Rewrites> {
+  const rewrites: Rewrites = new Map();
+  addedNamesPerPosition.clear();
+  if (analysis.isBarrel && !ctx.preservedBarrels.has(filePath) && !ctx.isPackageEntryPoint(filePath)) return rewrites;
+
+  for (const [importedFilePath, importSet] of analysis.imports) {
+    if (!isAbsolute(importedFilePath)) continue;
+    if (isIgnoredPath(importedFilePath, ctx.base)) continue;
+    if (ctx.preservedBarrels.has(importedFilePath) || ctx.isPackageEntryPoint(importedFilePath)) continue;
+
+    if (ctx.only.length > 0) {
+      if (!ctx.tracker.has(importedFilePath)) continue;
+    } else {
+      const importedFile = await analyzeFile(importedFilePath, ctx);
+      if (!isBarrel(importedFilePath, importedFile, ctx)) continue;
+      ctx.tracker.register(importedFilePath);
+    }
+
+    const importedFile = await analyzeFile(importedFilePath, ctx);
+
+    for (const item of importSet) {
+      if (!item) continue;
+
+      for (const name of item.names ?? []) {
+        const found = await traceExport(name, item, importedFile.exports, rewrites, ctx);
+        if (!found) {
+          ctx.tracker.untraceableImports.push({
+            barrelPath: importedFilePath,
+            consumerPath: filePath,
+            name: name.name,
+          });
+        }
+      }
+
+      for (const member of item.members ?? []) {
+        await traceExport(member, item, importedFile.exports, rewrites, ctx);
+      }
+
+      if (item.type === "default") {
+        const found = await traceExport({ name: "default" }, item, importedFile.exports, rewrites, ctx);
+        if (!found) {
+          ctx.tracker.untraceableImports.push({
+            barrelPath: importedFilePath,
+            consumerPath: filePath,
+            name: "default",
+          });
+        }
+      }
+
+      if (item.type === "ns" && item.name && !item.members?.length) {
+        const localExports = [...importedFile.exports.entries()].filter(([path]) => isAbsolute(path));
+        if (localExports.length === 1) {
+          const [targetPath, exportData] = localExports[0];
+          const targetFile = await analyzeFile(targetPath, ctx);
+
+          if (targetFile.isBarrel) {
+            const deepLocalExports = [...targetFile.exports.entries()].filter(([p]) => isAbsolute(p));
+            if (deepLocalExports.length === 1) {
+              const [deepTargetPath] = deepLocalExports[0];
+              addRewrite(
+                { name: item.name },
+                item,
+                { ...exportData, reExportedNs: item.name },
+                deepTargetPath,
+                rewrites,
+              );
+            }
+          } else {
+            addRewrite({ name: item.name }, item, { ...exportData, reExportedNs: item.name }, targetPath, rewrites);
+          }
+        } else if (localExports.length > 1 && ctx.unsafeNamespace) {
+          await buildUnsafeNamespaceRewrites(item, importedFile.exports, rewrites, ctx);
+        }
+      }
+
+      if (item.type === "export" && item.name === "*") {
+        await buildStarReExportRewrites(item, importedFile.exports, rewrites, ctx);
+      }
+    }
+  }
+
+  return rewrites;
+}
+
+async function buildUnsafeNamespaceRewrites(
+  item: ImportData,
+  exports: ExportMap,
+  rewrites: Rewrites,
+  ctx: Context,
+): Promise<void> {
+  const pos = `${item.pos.start}:${item.pos.end}`;
+  let posRewrites = rewrites.get(pos);
+  if (!posRewrites) {
+    posRewrites = new Map();
+    rewrites.set(pos, posRewrites);
+  }
+
+  for (const [targetFilePath, exportData] of exports) {
+    if (!isAbsolute(targetFilePath)) continue;
+    if (isIgnoredPath(targetFilePath, ctx.base)) continue;
+
+    const targetFile = await analyzeFile(targetFilePath, ctx);
+    const exportedNames = [...exportData.exportedNames];
+    if (exportedNames.length === 0 && !targetFile.isBarrel) {
+      for (const [, targetExportData] of targetFile.exports) {
+        exportedNames.push(...targetExportData.exportedNames);
+      }
+    }
+
+    if (exportedNames.length === 0) continue;
+
+    const existing = posRewrites.get(targetFilePath);
+    if (!existing) {
+      posRewrites.set(targetFilePath, {
+        type: "import",
+        named: exportedNames.map((name) => ({ name })),
+        members: [],
+        unsafeNsName: item.name,
+        originalSpecifier: item.originalSpecifier,
+        specifierPrefix: item.specifierPrefix,
+        specifierSuffix: item.specifierSuffix,
+      });
+    } else {
+      for (const name of exportedNames) {
+        if (!existing.named.some((n) => n.name === name)) {
+          existing.named.push({ name });
+        }
+      }
+      existing.unsafeNsName = item.name;
+    }
+
+    if (targetFile.isBarrel && ctx.only.length === 0) {
+      ctx.tracker.register(targetFilePath);
+    }
+  }
+}
+
+async function buildStarReExportRewrites(
+  item: ImportData,
+  exports: ExportMap,
+  rewrites: Rewrites,
+  ctx: Context,
+): Promise<void> {
+  const pos = `${item.pos.start}:${item.pos.end}`;
+  let posRewrites = rewrites.get(pos);
+  if (!posRewrites) {
+    posRewrites = new Map();
+    rewrites.set(pos, posRewrites);
+  }
+
+  const visited = new Set<string>();
+  await traceStarExports(exports, posRewrites, item, ctx, visited);
+}
+
+async function traceStarExports(
+  exports: ExportMap,
+  posRewrites: Map<string, Rewrite>,
+  item: ImportData,
+  ctx: Context,
+  visited: Set<string>,
+): Promise<void> {
+  for (const [targetFilePath] of exports) {
+    if (!isAbsolute(targetFilePath)) continue;
+    if (isIgnoredPath(targetFilePath, ctx.base)) continue;
+    if (visited.has(targetFilePath)) continue;
+    visited.add(targetFilePath);
+
+    const targetFile = await analyzeFile(targetFilePath, ctx);
+
+    if (targetFile.isBarrel) {
+      if (ctx.only.length === 0) {
+        ctx.tracker.register(targetFilePath);
+      }
+      await traceStarExports(targetFile.exports, posRewrites, item, ctx, visited);
+    } else {
+      if (!posRewrites.has(targetFilePath)) {
+        posRewrites.set(targetFilePath, {
+          type: "export",
+          named: [],
+          members: [],
+          originalSpecifier: item.originalSpecifier,
+          specifierPrefix: item.specifierPrefix,
+          specifierSuffix: item.specifierSuffix,
+        });
+      }
+    }
+  }
+}

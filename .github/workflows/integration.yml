@@ -1,0 +1,87 @@
+name: Test
+
+on:
+  workflow_dispatch:
+  pull_request:
+  push:
+    branches:
+      - '**'
+    tags:
+      - '!**'
+
+jobs:
+  test:
+    name: build & test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - uses: pnpm/action-setup@v4
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm run build
+      - run: pnpm run test
+      - run: pnpm dlx installed-check
+
+  integration:
+    name: unbarrelify ${{ matrix.project.name }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        project:
+          - name: argos
+            repo: argos-ci/argos
+            commands: |
+              pnpm install
+              unbarrelify --write
+              pnpm build
+              pnpm lint
+              pnpm check-types
+
+          - name: astro
+            repo: withastro/astro
+            commands: |
+              pnpm install
+              pnpm build
+              unbarrelify --write
+              pnpm build
+              pnpm biome lint
+              pnpm eslint . --report-unused-disable-directives-severity=warn --concurrency=auto
+
+          - name: sentry
+            repo: getsentry/sentry
+            commands: |
+              # prerewrite missing default imports
+              find static/app -name '*.stories.tsx' -exec sed -i 's/import documentation from/import * as documentation from/g' {} +
+              unbarrelify --write
+              pnpm install
+              pnpm build
+
+          - name: ts-api-utils
+            repo: JoshuaKGoldberg/ts-api-utils
+            commands: |
+              unbarrelify --write
+              pnpm install
+              pnpm build
+              pnpm test
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ matrix.project.repo }}
+          path: target
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - uses: pnpm/action-setup@v4
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm run build
+      - run: pnpm link
+      - name: unbarrelify ${{ matrix.project.name }}
+        working-directory: target
+        run: |
+          set -x
+          ${{ matrix.project.commands }}
