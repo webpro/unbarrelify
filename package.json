@@ -1,6 +1,6 @@
 {
   "name": "unbarrelify",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "type": "module",
   "description": "Barrel file removal tool for JavaScript & TypeScript projects (ESM-only)",
   "main": "./dist/index.js",
