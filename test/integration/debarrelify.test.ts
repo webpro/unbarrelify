@@ -581,6 +581,47 @@ describe("unbarrelify integration tests", () => {
     });
   });
 
+  describe("default-as-named-aliased fixture", () => {
+    test("preserves consumer alias when rewriting aliased default import", async (t) => {
+      const fixtureDir = await copyFixture(t, "default-as-named-aliased");
+
+      await unbarrelify({
+        cwd: fixtureDir,
+        files: ["**/*.ts"],
+        skip: [],
+        ext: ".js",
+        write: true,
+      });
+
+      const consumerContent = await read(join(fixtureDir, "consumer.ts"));
+
+      assert.ok(consumerContent.includes("import addFn from"));
+      assert.ok(!consumerContent.includes("import add from"));
+      assert.ok(consumerContent.includes("./source.js"));
+      assert.ok(!consumerContent.includes("./index"));
+    });
+  });
+
+  describe("named-alias-chain fixture", () => {
+    test("preserves consumer alias when barrel renames a named export", async (t) => {
+      const fixtureDir = await copyFixture(t, "named-alias-chain");
+
+      await unbarrelify({
+        cwd: fixtureDir,
+        files: ["**/*.ts"],
+        skip: [],
+        ext: ".js",
+        write: true,
+      });
+
+      const consumerContent = await read(join(fixtureDir, "consumer.ts"));
+
+      assert.ok(consumerContent.includes("{ foo as baz }"));
+      assert.ok(!consumerContent.includes("{ bar"));
+      assert.ok(consumerContent.includes("./source.js"));
+    });
+  });
+
   describe("named-as-default fixture", () => {
     test("handles export { name as default } pattern", async (t) => {
       const fixtureDir = await copyFixture(t, "named-as-default");
