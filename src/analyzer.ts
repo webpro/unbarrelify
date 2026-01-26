@@ -151,13 +151,13 @@ async function processLocalExport(
 ): Promise<void> {
   if (node.exportClause && ts.isNamedExports(node.exportClause)) {
     const exportedNames = new Set<string>();
-    const aliasedDefaults = new Map<string, string>();
+    const aliases = new Map<string, string>();
     let exportedAsDefault: string | undefined;
 
     for (const element of node.exportClause.elements) {
       exportedNames.add(element.name.text);
-      if (element.propertyName?.text === "default") {
-        aliasedDefaults.set(element.name.text, "default");
+      if (element.propertyName && element.propertyName.text !== element.name.text) {
+        aliases.set(element.name.text, element.propertyName.text);
       }
       if (element.name.text === "default" && element.propertyName) {
         exportedAsDefault = element.propertyName.text;
@@ -168,7 +168,7 @@ async function processLocalExport(
       specifier,
       pos,
       exportedNames,
-      aliasedDefaults: aliasedDefaults.size > 0 ? aliasedDefaults : undefined,
+      aliases: aliases.size > 0 ? aliases : undefined,
       exportedAsDefault,
     });
   } else {
@@ -222,10 +222,10 @@ function mergeExport(exports: ExportMap, path: string, data: ExportMap extends M
     existing.exportedNames.add(name);
   }
 
-  if (data.aliasedDefaults) {
-    existing.aliasedDefaults = existing.aliasedDefaults || new Map();
-    for (const [k, v] of data.aliasedDefaults) {
-      existing.aliasedDefaults.set(k, v);
+  if (data.aliases) {
+    existing.aliases = existing.aliases || new Map();
+    for (const [k, v] of data.aliases) {
+      existing.aliases.set(k, v);
     }
   }
 

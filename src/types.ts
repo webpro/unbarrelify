@@ -20,7 +20,7 @@ export interface ExportData {
   exportedNames: Set<string>;
   reExportedNs?: string;
   externalSpecifier?: string;
-  aliasedDefaults?: Map<string, string>;
+  aliases?: Map<string, string>;
   exportedAsDefault?: string;
 }
 

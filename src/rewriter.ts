@@ -33,28 +33,8 @@ export interface RewriteContext {
   singleQuote?: boolean;
 }
 
-export function buildRewriteItem(
-  name: Name,
-  importItem: ImportData,
-  exportItem: ExportData,
-  originalImportedName?: string,
-): Rewrite {
-  const isAliasedDefault = exportItem.aliasedDefaults?.has(name.name);
-  const isDirectDefault = name.name === "default";
-  const isTracingAliasedDefault = originalImportedName !== undefined;
-  const isDefault = isAliasedDefault || isDirectDefault || isTracingAliasedDefault;
-
-  let defaultName: string | undefined;
-  if (isDefault) {
-    if (isAliasedDefault) {
-      defaultName = name.name;
-    } else if (originalImportedName) {
-      defaultName = originalImportedName;
-    } else if (isDirectDefault) {
-      defaultName = name.alias ?? importItem.name;
-    }
-  }
-
+export function buildRewriteItem(name: Name, importItem: ImportData, exportItem: ExportData): Rewrite {
+  const isDefault = name.name === "default";
   return {
     type: importItem.type === "export" ? "export" : "import",
     ns: isDefault ? undefined : importItem.name,
@@ -62,7 +42,7 @@ export function buildRewriteItem(
     members: importItem.type === "ns" && !isDefault ? [{ name: name.name }] : [],
     externalSpecifier: exportItem.externalSpecifier,
     reExportedNs: exportItem.reExportedNs,
-    defaultName,
+    defaultName: isDefault ? (name.alias ?? importItem.name) : undefined,
     originalSpecifier: importItem.originalSpecifier,
     specifierPrefix: importItem.specifierPrefix,
     specifierSuffix: importItem.specifierSuffix,
@@ -136,18 +116,16 @@ function isNameExported(name: Name, exportItem: ExportData): boolean {
     return !!exportItem.externalSpecifier;
   }
   if (exportItem.exportedNames.has(name.name)) return true;
-  if (exportItem.aliasedDefaults?.has(name.name)) return true;
+  if (exportItem.aliases?.has(name.name)) return true;
   if (exportItem.reExportedNs === name.name) return true;
   if (exportItem.exportedAsDefault === name.name) return true;
-
-  if (name.name === "default" && exportItem.aliasedDefaults) {
-    return [...exportItem.aliasedDefaults.values()].includes("default");
+  if (exportItem.aliases) {
+    for (const originalName of exportItem.aliases.values()) {
+      if (originalName === name.name) return true;
+    }
   }
-
   return false;
 }
-
-const addedNamesPerPosition = new Map<string, Set<string>>();
 
 function addRewrite(
   name: Name,
@@ -155,26 +133,16 @@ function addRewrite(
   exportItem: ExportData,
   targetFilePath: string,
   rewrites: Rewrites,
-  originalImportedName?: string,
+  added: Set<string>,
 ): boolean {
   if (!isNameExported(name, exportItem)) return false;
 
   const pos = `${importItem.pos.start}:${importItem.pos.end}`;
-
-  let addedNames = addedNamesPerPosition.get(pos);
-  if (!addedNames) {
-    addedNames = new Set();
-    addedNamesPerPosition.set(pos, addedNames);
-  }
-
-  const nameKey = `${originalImportedName ?? name.name}:${name.alias ?? ""}`;
-  if (addedNames.has(nameKey)) {
-    return false;
-  }
-  addedNames.add(nameKey);
+  const nameKey = `${pos}:${name.name}:${name.alias ?? ""}`;
+  if (added.has(nameKey)) return false;
+  added.add(nameKey);
 
   let posRewrites = rewrites.get(pos);
-
   if (!posRewrites) {
     posRewrites = new Map();
     rewrites.set(pos, posRewrites);
@@ -182,7 +150,7 @@ function addRewrite(
 
   const existing = posRewrites.get(targetFilePath);
   if (!existing) {
-    posRewrites.set(targetFilePath, buildRewriteItem(name, importItem, exportItem, originalImportedName));
+    posRewrites.set(targetFilePath, buildRewriteItem(name, importItem, exportItem));
   } else {
     if (importItem.type === "ns") {
       existing.members.push({ name: name.name });
@@ -203,19 +171,15 @@ async function traceExport(
   exports: ExportMap | undefined,
   rewrites: Rewrites,
   ctx: Context,
-  originalImportedName?: string,
+  added: Set<string>,
 ): Promise<boolean> {
   if (!exports) return false;
-
-  const isDefaultImport = name.name === "default" || originalImportedName !== undefined;
-  let foundAny = false;
 
   for (const [targetFilePath, exportItem] of exports) {
     if (!isAbsolute(targetFilePath)) {
       if (exportItem.exportedNames.size === 0 || exportItem.exportedNames.has(name.name)) {
-        if (addRewrite(name, importItem, exportItem, targetFilePath, rewrites, originalImportedName)) {
-          if (isDefaultImport) return true;
-          foundAny = true;
+        if (addRewrite(name, importItem, exportItem, targetFilePath, rewrites, added)) {
+          return true;
         }
       }
       continue;
@@ -223,9 +187,8 @@ async function traceExport(
 
     if (exportItem.externalSpecifier) {
       if (exportItem.exportedNames.size === 0 || exportItem.exportedNames.has(name.name)) {
-        if (addRewrite(name, importItem, exportItem, exportItem.externalSpecifier, rewrites, originalImportedName)) {
-          if (isDefaultImport) return true;
-          foundAny = true;
+        if (addRewrite(name, importItem, exportItem, exportItem.externalSpecifier, rewrites, added)) {
+          return true;
         }
       }
       continue;
@@ -233,55 +196,38 @@ async function traceExport(
 
     if (isIgnoredPath(targetFilePath, ctx.base)) continue;
 
-    const isAliasedDefault = exportItem.aliasedDefaults?.has(name.name);
-    const isExportedAsDefault = name.name === "default" && exportItem.exportedAsDefault;
-
+    const alias = exportItem.aliases?.get(name.name);
     let effectiveName: Name;
-    let effectiveOriginalName: string | undefined;
 
-    if (isAliasedDefault) {
-      effectiveName = { name: "default" };
-      effectiveOriginalName = originalImportedName ?? name.name;
-    } else if (isExportedAsDefault && exportItem.exportedAsDefault) {
-      effectiveName = { name: exportItem.exportedAsDefault };
-      effectiveOriginalName = undefined;
+    if (alias) {
+      effectiveName = { name: alias, alias: name.alias ?? name.name };
+    } else if (name.name === "default" && exportItem.exportedAsDefault) {
+      effectiveName = { name: exportItem.exportedAsDefault, alias: name.alias ?? importItem.name };
     } else {
       effectiveName = name;
-      effectiveOriginalName = originalImportedName;
     }
 
     const targetFile = await analyzeFile(targetFilePath, ctx);
 
     if (!targetFile.isBarrel) {
-      if (addRewrite(effectiveName, importItem, exportItem, targetFilePath, rewrites, effectiveOriginalName)) {
-        if (isDefaultImport) return true;
-        foundAny = true;
-        continue;
+      if (addRewrite(effectiveName, importItem, exportItem, targetFilePath, rewrites, added)) {
+        return true;
       }
     } else if (ctx.only.length === 0) {
       ctx.tracker.register(targetFilePath);
     }
 
-    const found = await traceExport(
-      effectiveName,
-      importItem,
-      targetFile.exports,
-      rewrites,
-      ctx,
-      effectiveOriginalName,
-    );
-    if (found) {
-      if (isDefaultImport) return true;
-      foundAny = true;
+    if (await traceExport(effectiveName, importItem, targetFile.exports, rewrites, ctx, added)) {
+      return true;
     }
   }
 
-  return foundAny;
+  return false;
 }
 
 export async function buildRewrites(analysis: File, filePath: string, ctx: Context): Promise<Rewrites> {
   const rewrites: Rewrites = new Map();
-  addedNamesPerPosition.clear();
+  const added = new Set<string>();
   if (analysis.isBarrel && !ctx.preservedBarrels.has(filePath) && !ctx.isPackageEntryPoint(filePath)) return rewrites;
 
   for (const [importedFilePath, importSet] of analysis.imports) {
@@ -303,7 +249,7 @@ export async function buildRewrites(analysis: File, filePath: string, ctx: Conte
       if (!item) continue;
 
       for (const name of item.names ?? []) {
-        const found = await traceExport(name, item, importedFile.exports, rewrites, ctx);
+        const found = await traceExport(name, item, importedFile.exports, rewrites, ctx, added);
         if (!found) {
           ctx.tracker.untraceableImports.push({
             barrelPath: importedFilePath,
@@ -314,11 +260,11 @@ export async function buildRewrites(analysis: File, filePath: string, ctx: Conte
       }
 
       for (const member of item.members ?? []) {
-        await traceExport(member, item, importedFile.exports, rewrites, ctx);
+        await traceExport(member, item, importedFile.exports, rewrites, ctx, added);
       }
 
       if (item.type === "default") {
-        const found = await traceExport({ name: "default" }, item, importedFile.exports, rewrites, ctx);
+        const found = await traceExport({ name: "default" }, item, importedFile.exports, rewrites, ctx, added);
         if (!found) {
           ctx.tracker.untraceableImports.push({
             barrelPath: importedFilePath,
@@ -334,20 +280,20 @@ export async function buildRewrites(analysis: File, filePath: string, ctx: Conte
           const [targetPath, exportData] = localExports[0];
           const targetFile = await analyzeFile(targetPath, ctx);
 
+          let finalPath = targetPath;
           if (targetFile.isBarrel) {
             const deepLocalExports = [...targetFile.exports.entries()].filter(([p]) => isAbsolute(p));
-            if (deepLocalExports.length === 1) {
-              const [deepTargetPath] = deepLocalExports[0];
-              addRewrite(
-                { name: item.name },
-                item,
-                { ...exportData, reExportedNs: item.name },
-                deepTargetPath,
-                rewrites,
-              );
-            }
-          } else {
-            addRewrite({ name: item.name }, item, { ...exportData, reExportedNs: item.name }, targetPath, rewrites);
+            if (deepLocalExports.length === 1) finalPath = deepLocalExports[0][0];
+          }
+          if (finalPath) {
+            addRewrite(
+              { name: item.name },
+              item,
+              { ...exportData, reExportedNs: item.name },
+              finalPath,
+              rewrites,
+              added,
+            );
           }
         } else if (localExports.length > 1 && ctx.unsafeNamespace) {
           await buildUnsafeNamespaceRewrites(item, importedFile.exports, rewrites, ctx);
