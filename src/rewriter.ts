@@ -1,7 +1,6 @@
 import { isAbsolute } from "node:path";
 import type ts from "typescript";
 import { analyzeFile } from "./analyzer.ts";
-import { getExtensionFromSpecifier, tryMapToAlias } from "./config.ts";
 import {
   createImportDeclaration,
   createNsImportDeclaration,

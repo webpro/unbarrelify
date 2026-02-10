@@ -58,7 +58,7 @@ export function ensureExtension(path: string, ext: string | null): string {
   return ext ? path.replace(JS_EXT_PATTERN, ext) : path.replace(JS_EXT_PATTERN, "");
 }
 
-export interface SpecifierOptions {
+interface SpecifierOptions {
   ext?: string | null;
   originalSpecifier?: string;
   aliases?: PathAliases | null;

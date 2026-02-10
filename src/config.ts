@@ -5,7 +5,7 @@ import type { PathAliases } from "./types.ts";
 import { JS_EXT_PATTERN } from "./constants.ts";
 import { createEntryPointChecker } from "./entry.ts";
 
-export interface ProjectConfig {
+interface ProjectConfig {
   aliases: PathAliases | null;
   files: string[];
   isPackageEntryPoint: (filePath: string) => boolean;
