@@ -1,7 +1,8 @@
 import { dirname, join, resolve } from "node:path";
 import { existsSync, readFileSync } from "node:fs";
+import { globSync } from "tinyglobby";
 import ts from "typescript";
-import { JS_EXT_PATTERN } from "./constants.ts";
+import { EXTENSIONS, JS_EXT_PATTERN } from "./constants.ts";
 
 interface EntryPointData {
   resolvedPaths: Set<string>;
@@ -85,6 +86,9 @@ export function createEntryPointChecker(): (filePath: string) => boolean {
     if (typeof pkg.module === "string") {
       addEntryPoint(resolve(pkgDir, pkg.module), outDir, rootDir, data);
     }
+
+    const [indexFile] = globSync(`index.{${EXTENSIONS.join(",")}}`, { cwd: pkgDir });
+    if (indexFile) data.resolvedPaths.add(join(pkgDir, indexFile));
 
     return data;
   }

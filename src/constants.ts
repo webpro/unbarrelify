@@ -1,5 +1,6 @@
-const JS_EXTENSIONS = [".ts", ".tsx", ".js", ".jsx", ".mjs", ".mts", ".cjs", ".cts"] as const;
-export const JS_EXT_PATTERN = /\.(js|ts|tsx|jsx|mjs|mts|cjs|cts)$/;
+export const EXTENSIONS = ["ts", "tsx", "js", "jsx", "mjs", "mts", "cjs", "cts"] as const;
+const JS_EXTENSIONS = EXTENSIONS.map((id) => `.${id}`);
+export const JS_EXT_PATTERN = new RegExp(`\\.(${EXTENSIONS.join("|")})$`);
 export const DEFAULT_GLOBS = JS_EXTENSIONS.map((ext) => `**/*${ext}`);
 export const RESOLVER_EXTENSIONS = [...JS_EXTENSIONS, ".json"] as const;
 
