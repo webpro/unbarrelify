@@ -174,6 +174,19 @@ import { formatDate } from "./utils/date.ts";
 import { capitalize } from "./utils/string.ts";
 ```
 
+## Preserved barrel files
+
+This prevents barrel files from getting deleted:
+
+* File is in `package.json` such as `main` or `exports` field.
+* File is `index.*` at root level (of each workspace).
+* File is in `--skip` argument.
+* Dynamic import calls are not modified, so the imported barrel file is not deleted (e.g. `import("barrel.ts")`).
+* Non-JS/TS files are not modified, so the imported barrel file is not deleted (e.g. `*.mdx`).
+* Namespace imports are not modified, use `--unsafe-namespace` to rewrite (e.g. `import * as NS from "barrel"`).
+
+The output in CLI prints "Preserved barrel files" with details.
+
 ## License
 
 ISC
