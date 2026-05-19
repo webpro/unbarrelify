@@ -52,7 +52,7 @@
     "oxlint": "^1.65.0"
   },
   "engines": {
-    "node": ">=20.12.0"
+    "node": "^20.19.0 || >=22.12.0"
   },
   "packageManager": "pnpm@11.1.3"
 }
