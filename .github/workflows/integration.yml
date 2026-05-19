@@ -77,9 +77,13 @@ jobs:
         with:
           node-version: 24
       - uses: pnpm/action-setup@v4
+      - name: Set up pnpm global bin
+        run: |
+          echo "PNPM_HOME=$HOME/.local/share/pnpm" >> "$GITHUB_ENV"
+          echo "$HOME/.local/share/pnpm/bin" >> "$GITHUB_PATH"
       - run: pnpm install --frozen-lockfile
       - run: pnpm run build
-      - run: pnpm link
+      - run: pnpm add -g .
       - name: unbarrelify ${{ matrix.project.name }}
         working-directory: target
         run: |
