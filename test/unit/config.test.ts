@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { join } from "node:path";
+import { join, relative } from "node:path";
 import { initProjectConfig, tryMapToAlias } from "../../src/config.ts";
 import type { PathAliases } from "../../src/types.ts";
 
@@ -10,6 +10,17 @@ test("initProjectConfig: loads files from tsconfig include", () => {
   const config = initProjectConfig(join(fixturesDir, "namespace-import"));
   assert.ok(config.files.length >= 2);
   assert.ok(config.files.some((f) => f.endsWith("consumer.ts")));
+});
+
+test("initProjectConfig: loads files from nested project references", () => {
+  const fixtureDir = join(fixturesDir, "project-references");
+  const config = initProjectConfig(fixtureDir);
+
+  assert.deepEqual(config.files.map((file) => relative(fixtureDir, file)).sort(), [
+    "packages/app/src/consumer.ts",
+    "packages/app/src/index.ts",
+    "packages/app/src/value.ts",
+  ]);
 });
 
 test("initProjectConfig: isPackageEntryPoint returns true for package.json#exports", () => {

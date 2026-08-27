@@ -1,4 +1,4 @@
-import { dirname, join } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { existsSync } from "node:fs";
 import ts from "typescript";
 import type { PathAliases } from "./types.ts";
@@ -13,11 +13,12 @@ interface ProjectConfig {
 
 export function initProjectConfig(cwd: string): ProjectConfig {
   const tsconfigPath = findTsConfig(cwd);
-  const parsed = tsconfigPath ? parseTsConfig(tsconfigPath) : null;
+  const graph = tsconfigPath ? parseTsConfigGraph(tsconfigPath) : null;
+  const parsed = graph?.root ?? null;
   const tsconfigDir = tsconfigPath ? dirname(tsconfigPath) : null;
 
   const aliases = parsed && tsconfigDir ? extractPathAliases(parsed, tsconfigDir) : null;
-  const files = parsed?.fileNames ?? [];
+  const files = graph?.files ?? [];
   const isPackageEntryPoint = createEntryPointChecker();
 
   return { aliases, files, isPackageEntryPoint };
@@ -33,7 +34,36 @@ function findTsConfig(startDir: string): string | null {
   return null;
 }
 
-function parseTsConfig(tsconfigPath: string): ts.ParsedCommandLine | null {
+interface TsConfigGraph {
+  root: ts.ParsedCommandLine;
+  files: string[];
+}
+
+function parseTsConfigGraph(tsconfigPath: string): TsConfigGraph | null {
+  const visited = new Set<string>();
+  const files = new Set<string>();
+  let root: ts.ParsedCommandLine | null = null;
+
+  function visit(configPath: string): void {
+    const normalizedPath = resolve(configPath);
+    if (visited.has(normalizedPath)) return;
+    visited.add(normalizedPath);
+
+    const parsed = parseTsConfigFile(normalizedPath);
+    if (!parsed) return;
+    root ??= parsed;
+
+    for (const file of parsed.fileNames) files.add(file);
+    for (const reference of parsed.projectReferences ?? []) {
+      visit(ts.resolveProjectReferencePath(reference));
+    }
+  }
+
+  visit(tsconfigPath);
+  return root ? { root, files: [...files] } : null;
+}
+
+function parseTsConfigFile(tsconfigPath: string): ts.ParsedCommandLine | null {
   const configFile = ts.readConfigFile(tsconfigPath, ts.sys.readFile);
   if (configFile.error) return null;
 
