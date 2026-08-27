@@ -695,9 +695,10 @@ describe("unbarrelify integration tests", () => {
 
       const consumerContent = await read(join(fixtureDir, "consumer.ts"));
 
-      assert.ok(consumerContent.includes("myFunction"));
-      assert.ok(consumerContent.includes("./source.js"));
-      assert.ok(!consumerContent.includes("./index"));
+      assert.equal(
+        consumerContent,
+        'import { helperValue, myFunction as myFunc } from "./source.js";\n\nconst result = myFunc();\nconsole.log(result, helperValue);\n',
+      );
     });
 
     test("preserves regular named exports alongside named-as-default", async (t) => {

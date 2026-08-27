@@ -193,10 +193,14 @@ async function traceExport(
     const alias = exportItem.aliases?.get(name.name);
     let effectiveName: Name;
 
-    if (alias) {
+    if (name.name === "default" && exportItem.exportedAsDefault) {
+      const localName = name.alias ?? importItem.name;
+      effectiveName = {
+        name: exportItem.exportedAsDefault,
+        alias: localName === exportItem.exportedAsDefault ? undefined : localName,
+      };
+    } else if (alias) {
       effectiveName = { name: alias, alias: name.alias ?? name.name };
-    } else if (name.name === "default" && exportItem.exportedAsDefault) {
-      effectiveName = { name: exportItem.exportedAsDefault, alias: name.alias ?? importItem.name };
     } else {
       effectiveName = name;
     }
