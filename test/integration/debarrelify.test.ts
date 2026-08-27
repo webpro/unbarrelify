@@ -643,6 +643,25 @@ describe("unbarrelify integration tests", () => {
     });
   });
 
+  describe("default-reexport-through-barrel fixture", () => {
+    test("preserves the default alias in a re-export", async (t) => {
+      const fixtureDir = await copyFixture(t, "default-reexport-through-barrel");
+
+      await unbarrelify({
+        cwd: fixtureDir,
+        files: ["**/*.ts"],
+        skip: [],
+        ext: ".js",
+        write: true,
+      });
+
+      assert.equal(
+        await read(join(fixtureDir, "entry.ts")),
+        'export { default as dev } from "./source.js";\n\nexport const sync = true;\n',
+      );
+    });
+  });
+
   describe("named-alias-chain fixture", () => {
     test("preserves consumer alias when barrel renames a named export", async (t) => {
       const fixtureDir = await copyFixture(t, "named-alias-chain");

@@ -34,14 +34,16 @@ export interface RewriteContext {
 
 export function buildRewriteItem(name: Name, importItem: ImportData, exportItem: ExportData): Rewrite {
   const isDefault = name.name === "default";
+  const isReExport = importItem.type === "export";
   return {
-    type: importItem.type === "export" ? "export" : "import",
+    type: isReExport ? "export" : "import",
     ns: isDefault ? undefined : importItem.name,
-    named: isDefault ? [] : [name],
+    named:
+      isDefault && isReExport ? [{ name: "default", alias: name.alias ?? importItem.name }] : isDefault ? [] : [name],
     members: importItem.type === "ns" && !isDefault ? [{ name: name.name }] : [],
     externalSpecifier: exportItem.externalSpecifier,
     reExportedNs: exportItem.reExportedNs,
-    defaultName: isDefault ? (name.alias ?? importItem.name) : undefined,
+    defaultName: isDefault && !isReExport ? (name.alias ?? importItem.name) : undefined,
     originalSpecifier: importItem.originalSpecifier,
     specifierPrefix: importItem.specifierPrefix,
     specifierSuffix: importItem.specifierSuffix,
