@@ -1178,6 +1178,26 @@ describe("unbarrelify integration tests", () => {
     });
   });
 
+  describe("non-ts-dynamic-consumer fixture", () => {
+    test("preserves barrels imported dynamically by non-TS consumers", async (t) => {
+      const fixtureDir = await copyFixture(t, "non-ts-dynamic-consumer");
+
+      const result = await unbarrelify({
+        cwd: fixtureDir,
+        files: ["**/*.ts"],
+        skip: [],
+        write: true,
+      });
+
+      const preservedBarrel = result.preserved.find((p) => p.path.includes("slideOverPanel/index.ts"));
+      assert.equal(preservedBarrel?.reason, "non-ts-import");
+      assert.ok(preservedBarrel.consumers?.some((consumer) => consumer.endsWith(".mdx")));
+
+      const barrel = await read(join(fixtureDir, "src/slideOverPanel/index.ts"));
+      assert.equal(barrel, 'export { SlideOverPanel } from "./slideOverPanel";\n');
+    });
+  });
+
   describe("organize-imports fixture", () => {
     test("merges duplicate imports from same module", async (t) => {
       const fixtureDir = await copyFixture(t, "organize-imports");

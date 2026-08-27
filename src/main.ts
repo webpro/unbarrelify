@@ -323,7 +323,7 @@ function pickBestExample(
   return current;
 }
 
-const IMPORT_PATTERN = /(?:import|export)\s+(?:[\s\S]*?\s+from\s+)?['"]([^'"]+)['"]/g;
+const IMPORT_PATTERN = /(?:(?:import|export)\s+(?:[\s\S]*?\s+from\s+)?|import\s*\(\s*)['"]([^'"]+)['"]/g;
 const NON_TS_FILE_GLOB = "**/*.{astro,html,marko,mdx,svelte,vue}";
 
 async function trackNonTsConsumers(ctx: Context): Promise<void> {
