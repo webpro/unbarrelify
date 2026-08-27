@@ -378,8 +378,8 @@ async function buildStarReExportRewrites(
     rewrites.set(pos, posRewrites);
   }
 
-  const visited = new Set<string>();
-  await traceStarExports(exports, posRewrites, item, ctx, visited);
+  const visited = new Map<string, boolean>();
+  await traceStarExports(exports, posRewrites, item, ctx, visited, Boolean(item.isTypeOnly));
   return true;
 }
 
@@ -388,6 +388,7 @@ async function canFlattenStarExports(exports: ExportMap, ctx: Context, visited: 
     if (!isAbsolute(targetFilePath) || isIgnoredPath(targetFilePath, ctx.base)) return false;
     if (
       !exportData.exportAll ||
+      exportData.hasNamedExports ||
       exportData.aliases ||
       exportData.exportedAsDefault ||
       exportData.reExportedNs
@@ -409,13 +410,16 @@ async function traceStarExports(
   posRewrites: Map<string, Rewrite>,
   item: ImportData,
   ctx: Context,
-  visited: Set<string>,
+  visited: Map<string, boolean>,
+  inheritedTypeOnly: boolean,
 ): Promise<void> {
-  for (const [targetFilePath] of exports) {
+  for (const [targetFilePath, exportData] of exports) {
     if (!isAbsolute(targetFilePath)) continue;
     if (isIgnoredPath(targetFilePath, ctx.base)) continue;
-    if (visited.has(targetFilePath)) continue;
-    visited.add(targetFilePath);
+    const isTypeOnly = inheritedTypeOnly || Boolean(exportData.exportAllIsTypeOnly);
+    const visitedAsTypeOnly = visited.get(targetFilePath);
+    if (visitedAsTypeOnly === false || visitedAsTypeOnly === isTypeOnly) continue;
+    visited.set(targetFilePath, isTypeOnly);
 
     const targetFile = await analyzeFile(targetFilePath, ctx);
 
@@ -423,17 +427,21 @@ async function traceStarExports(
       if (ctx.only.length === 0) {
         ctx.tracker.register(targetFilePath);
       }
-      await traceStarExports(targetFile.exports, posRewrites, item, ctx, visited);
+      await traceStarExports(targetFile.exports, posRewrites, item, ctx, visited, isTypeOnly);
     } else {
-      if (!posRewrites.has(targetFilePath)) {
+      const existing = posRewrites.get(targetFilePath);
+      if (!existing) {
         posRewrites.set(targetFilePath, {
           type: "export",
           named: [],
           members: [],
+          isTypeOnly,
           originalSpecifier: item.originalSpecifier,
           specifierPrefix: item.specifierPrefix,
           specifierSuffix: item.specifierSuffix,
         });
+      } else if (!isTypeOnly) {
+        existing.isTypeOnly = false;
       }
     }
   }

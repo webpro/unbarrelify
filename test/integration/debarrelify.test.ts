@@ -201,6 +201,33 @@ describe("unbarrelify integration tests", () => {
     });
   });
 
+  describe("star-reexport-all fixture", () => {
+    test("preserves whether a flattened star re-export is type-only", async (t) => {
+      const fixtureDir = await copyFixture(t, "star-reexport-all");
+
+      await unbarrelify({
+        cwd: fixtureDir,
+        files: ["**/*.ts"],
+        skip: [],
+        ext: ".js",
+        write: true,
+      });
+
+      assert.deepEqual(
+        await Promise.all([
+          read(join(fixtureDir, "entry.ts")),
+          read(join(fixtureDir, "type-entry.ts")),
+          read(join(fixtureDir, "value-through-type.ts")),
+        ]),
+        [
+          'export * from "./source.js";\n\nexport const own = true;\n',
+          'export type * from "./source.js";\n\nexport const ownTypeEntry = true;\n',
+          'export type * from "./source.js";\n\nexport const ownValueEntry = true;\n',
+        ],
+      );
+    });
+  });
+
   describe("mixed-imports fixture", () => {
     test("handles mixed import types (named, default, aliased)", async (t) => {
       const fixtureDir = await copyFixture(t, "mixed-imports");

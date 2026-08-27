@@ -19,6 +19,8 @@ export interface ExportData {
   pos: Position;
   exportedNames: Set<string>;
   exportAll?: boolean;
+  exportAllIsTypeOnly?: boolean;
+  hasNamedExports?: boolean;
   reExportedNs?: string;
   externalSpecifier?: string;
   aliases?: Map<string, string>;
@@ -40,6 +42,7 @@ export interface ImportData {
   pos: Position;
   type: "named" | "default" | "ns" | "as" | "export";
   originalSpecifier?: string;
+  isTypeOnly?: boolean;
   specifierPrefix?: string;
   specifierSuffix?: string;
 }
@@ -54,6 +57,7 @@ export interface Rewrite {
   externalSpecifier?: string;
   reExportedNs?: string;
   defaultName?: string;
+  isTypeOnly?: boolean;
   originalSpecifier?: string;
   specifierPrefix?: string;
   specifierSuffix?: string;

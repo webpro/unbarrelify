@@ -54,7 +54,8 @@ export function createReExportDeclaration(
   singleQuote = false,
 ): ts.ExportDeclaration {
   const namedIds = rewrite.named ?? [];
-  const isTypeOnly = !rewrite.defaultName && namedIds.every((item) => item.isType);
+  const isTypeOnly =
+    rewrite.isTypeOnly ?? (!rewrite.defaultName && namedIds.length > 0 && namedIds.every((item) => item.isType));
 
   const identifiers =
     namedIds.length > 0

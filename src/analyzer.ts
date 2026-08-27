@@ -168,6 +168,7 @@ async function processLocalExport(
       specifier,
       pos,
       exportedNames,
+      hasNamedExports: true,
       aliases: aliases.size > 0 ? aliases : undefined,
       exportedAsDefault,
     });
@@ -181,6 +182,7 @@ async function processLocalExport(
       pos,
       exportedNames,
       exportAll: !node.exportClause,
+      exportAllIsTypeOnly: !node.exportClause ? node.isTypeOnly : undefined,
       reExportedNs: namespace,
       externalSpecifier: specifier.startsWith(".") ? undefined : specifier,
     });
@@ -208,6 +210,8 @@ function processExternalExport(
     pos,
     exportedNames,
     exportAll: !node.exportClause,
+    exportAllIsTypeOnly: !node.exportClause ? node.isTypeOnly : undefined,
+    hasNamedExports: Boolean(node.exportClause && ts.isNamedExports(node.exportClause)),
     reExportedNs: namespace,
     externalSpecifier: specifier,
   });
@@ -232,7 +236,14 @@ function mergeExport(exports: ExportMap, path: string, data: ExportMap extends M
   }
 
   if (data.exportAll) {
+    existing.exportAllIsTypeOnly = existing.exportAll
+      ? Boolean(existing.exportAllIsTypeOnly && data.exportAllIsTypeOnly)
+      : data.exportAllIsTypeOnly;
     existing.exportAll = true;
+  }
+
+  if (data.hasNamedExports) {
+    existing.hasNamedExports = true;
   }
 
   if (data.exportedAsDefault && !existing.exportedAsDefault) {
@@ -362,6 +373,7 @@ function processReExportDeclaration(
       name: "*",
       type: "export",
       pos,
+      isTypeOnly: node.isTypeOnly,
       originalSpecifier: path,
       specifierPrefix,
       specifierSuffix,
