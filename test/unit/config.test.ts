@@ -21,6 +21,10 @@ test("initProjectConfig: loads files from nested project references", () => {
     "packages/app/src/index.ts",
     "packages/app/src/value.ts",
   ]);
+  assert.deepEqual(
+    config.explicitFiles.map((file) => relative(fixtureDir, file)),
+    ["packages/app/src/index.ts"],
+  );
 });
 
 test("initProjectConfig: isPackageEntryPoint returns true for package.json#exports", () => {

@@ -176,7 +176,7 @@ export async function main(): Promise<void> {
 
     if (skipped.length > 0) {
       console.error(
-        `\n${styleText("cyan", "ℹ")} ${styleText("underline", "Preserved barrel files")} (via --skip or package.json#exports):`,
+        `\n${styleText("cyan", "ℹ")} ${styleText("underline", "Preserved barrel files")} (via --skip, tsconfig#files, or package.json#exports):`,
       );
       for (const { path } of skipped) {
         console.error(`  ${rel(path)}`);

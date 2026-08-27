@@ -67,7 +67,7 @@ async function createContext(options: Options): Promise<Context> {
       : new Set();
 
   const skipPatterns = await glob(skip, { cwd: base, onlyFiles: true, absolute: true, dot: false });
-  const preservedBarrels = new Set(skipPatterns);
+  const preservedBarrels = new Set([...skipPatterns, ...project.explicitFiles]);
 
   const tracker = new BarrelTracker();
 

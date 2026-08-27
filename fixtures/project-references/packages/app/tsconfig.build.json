@@ -3,5 +3,6 @@
     "composite": true,
     "module": "ESNext"
   },
+  "files": ["src/index.ts"],
   "include": ["src/**/*.ts"]
 }

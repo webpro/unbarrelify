@@ -1218,6 +1218,25 @@ describe("unbarrelify integration tests", () => {
     });
   });
 
+  describe("project-references fixture", () => {
+    test("preserves barrels listed explicitly in referenced tsconfigs", async (t) => {
+      const fixtureDir = await copyFixture(t, "project-references");
+
+      const result = await unbarrelify({
+        cwd: fixtureDir,
+        skip: [],
+        write: true,
+      });
+
+      assert.ok(result.preserved.some((item) => item.path.endsWith("/src/index.ts")));
+      assert.equal(result.deleted.length, 0);
+      assert.equal(
+        await read(join(fixtureDir, "packages/app/src/consumer.ts")),
+        'import { value } from "./index";\n\nconsole.log(value);\n',
+      );
+    });
+  });
+
   describe("organize-imports fixture", () => {
     test("merges duplicate imports from same module", async (t) => {
       const fixtureDir = await copyFixture(t, "organize-imports");

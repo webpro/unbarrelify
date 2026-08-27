@@ -8,6 +8,7 @@ import { createEntryPointChecker } from "./entry.ts";
 interface ProjectConfig {
   aliases: PathAliases | null;
   files: string[];
+  explicitFiles: string[];
   isPackageEntryPoint: (filePath: string) => boolean;
 }
 
@@ -19,9 +20,10 @@ export function initProjectConfig(cwd: string): ProjectConfig {
 
   const aliases = parsed && tsconfigDir ? extractPathAliases(parsed, tsconfigDir) : null;
   const files = graph?.files ?? [];
+  const explicitFiles = graph?.explicitFiles ?? [];
   const isPackageEntryPoint = createEntryPointChecker();
 
-  return { aliases, files, isPackageEntryPoint };
+  return { aliases, files, explicitFiles, isPackageEntryPoint };
 }
 
 function findTsConfig(startDir: string): string | null {
@@ -37,11 +39,13 @@ function findTsConfig(startDir: string): string | null {
 interface TsConfigGraph {
   root: ts.ParsedCommandLine;
   files: string[];
+  explicitFiles: string[];
 }
 
 function parseTsConfigGraph(tsconfigPath: string): TsConfigGraph | null {
   const visited = new Set<string>();
   const files = new Set<string>();
+  const explicitFiles = new Set<string>();
   let root: ts.ParsedCommandLine | null = null;
 
   function visit(configPath: string): void {
@@ -54,13 +58,16 @@ function parseTsConfigGraph(tsconfigPath: string): TsConfigGraph | null {
     root ??= parsed;
 
     for (const file of parsed.fileNames) files.add(file);
+    for (const file of parsed.raw?.files ?? []) {
+      if (typeof file === "string") explicitFiles.add(resolve(dirname(normalizedPath), file));
+    }
     for (const reference of parsed.projectReferences ?? []) {
       visit(ts.resolveProjectReferencePath(reference));
     }
   }
 
   visit(tsconfigPath);
-  return root ? { root, files: [...files] } : null;
+  return root ? { root, files: [...files], explicitFiles: [...explicitFiles] } : null;
 }
 
 function parseTsConfigFile(tsconfigPath: string): ts.ParsedCommandLine | null {
