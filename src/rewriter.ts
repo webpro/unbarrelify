@@ -117,12 +117,6 @@ function isNameExported(name: Name, exportItem: ExportData): boolean {
   if (exportItem.exportedNames.has(name.name)) return true;
   if (exportItem.aliases?.has(name.name)) return true;
   if (exportItem.reExportedNs === name.name) return true;
-  if (exportItem.exportedAsDefault === name.name) return true;
-  if (exportItem.aliases) {
-    for (const originalName of exportItem.aliases.values()) {
-      if (originalName === name.name) return true;
-    }
-  }
   return false;
 }
 
@@ -134,8 +128,6 @@ function addRewrite(
   rewrites: Rewrites,
   added: Set<string>,
 ): boolean {
-  if (!isNameExported(name, exportItem)) return false;
-
   const pos = `${importItem.pos.start}:${importItem.pos.end}`;
   const nameKey = `${pos}:${name.name}:${name.alias ?? ""}`;
   if (added.has(nameKey)) return false;
@@ -175,6 +167,9 @@ async function traceExport(
   if (!exports) return false;
 
   for (const [targetFilePath, exportItem] of exports) {
+    const isExported = isNameExported(name, exportItem);
+    if (!isExported && !exportItem.exportAll) continue;
+
     if (!isAbsolute(targetFilePath)) {
       if (exportItem.exportedNames.size === 0 || exportItem.exportedNames.has(name.name)) {
         if (addRewrite(name, importItem, exportItem, targetFilePath, rewrites, added)) {
@@ -209,7 +204,7 @@ async function traceExport(
     const targetFile = await analyzeFile(targetFilePath, ctx);
 
     if (!targetFile.isBarrel) {
-      if (addRewrite(effectiveName, importItem, exportItem, targetFilePath, rewrites, added)) {
+      if (isExported && addRewrite(effectiveName, importItem, exportItem, targetFilePath, rewrites, added)) {
         return true;
       }
     } else if (ctx.only.length === 0) {
@@ -284,7 +279,7 @@ export async function buildRewrites(analysis: File, filePath: string, ctx: Conte
             const deepLocalExports = [...targetFile.exports.entries()].filter(([p]) => isAbsolute(p));
             if (deepLocalExports.length === 1) finalPath = deepLocalExports[0][0];
           }
-          if (finalPath) {
+          if (finalPath && (exportData.exportedNames.size > 0 || exportData.externalSpecifier)) {
             addRewrite(
               { name: item.name },
               item,

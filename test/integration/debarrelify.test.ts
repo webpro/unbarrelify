@@ -164,6 +164,25 @@ describe("unbarrelify integration tests", () => {
     });
   });
 
+  describe("star-through-nonbarrel fixture", () => {
+    test("resolves star exports through a non-barrel intermediate", async (t) => {
+      const fixtureDir = await copyFixture(t, "star-through-nonbarrel");
+
+      await unbarrelify({
+        cwd: fixtureDir,
+        files: ["**/*.ts"],
+        skip: [],
+        ext: ".js",
+        write: true,
+      });
+
+      assert.equal(
+        await read(join(fixtureDir, "consumer.ts")),
+        'import { call } from "./api.js";\nimport type { SomeType } from "./types.js";\n\nconst value: SomeType = { a: 1 };\n\ncall();\nconsole.log(value);\n',
+      );
+    });
+  });
+
   describe("mixed-imports fixture", () => {
     test("handles mixed import types (named, default, aliased)", async (t) => {
       const fixtureDir = await copyFixture(t, "mixed-imports");
@@ -602,6 +621,28 @@ describe("unbarrelify integration tests", () => {
     });
   });
 
+  describe("default-reexport-collision fixture", () => {
+    test("resolves a bare default independently of aliased defaults", async (t) => {
+      const fixtureDir = await copyFixture(t, "default-reexport-collision");
+
+      await unbarrelify({
+        cwd: fixtureDir,
+        files: ["**/*.ts"],
+        skip: [],
+        ext: ".js",
+        write: true,
+      });
+
+      assert.deepEqual(
+        await Promise.all([read(join(fixtureDir, "consumer-default.ts")), read(join(fixtureDir, "consumer-mixed.ts"))]),
+        [
+          'import Button from "./Button.js";\n\nButton();\n',
+          'import IconButton from "./IconButton.js";\nimport Button from "./Button.js";\n\nButton();\nIconButton();\n',
+        ],
+      );
+    });
+  });
+
   describe("named-alias-chain fixture", () => {
     test("preserves consumer alias when barrel renames a named export", async (t) => {
       const fixtureDir = await copyFixture(t, "named-alias-chain");
@@ -738,6 +779,25 @@ describe("unbarrelify integration tests", () => {
       assert.equal(preservedBarrel?.reason, "namespace-import");
       assert.ok(preservedBarrel?.consumers?.length === 1);
       assert.ok(preservedBarrel?.consumers?.[0].includes("consumer.ts"));
+    });
+
+    test("preserves a re-exported namespace through a star barrel", async (t) => {
+      const fixtureDir = await copyFixture(t, "namespace-reexport-chain");
+
+      const result = await unbarrelify({
+        cwd: fixtureDir,
+        files: ["**/*.ts"],
+        skip: [],
+        ext: ".js",
+        write: true,
+      });
+
+      assert.equal(
+        await read(join(fixtureDir, "consumer.ts")),
+        'import * as lib from "./index.ts";\n\nlib.helpers.foo();\n',
+      );
+      const preservedBarrel = result.preserved.find((item) => item.path.endsWith("/index.ts"));
+      assert.equal(preservedBarrel?.reason, "namespace-import");
     });
 
     test("preserves barrel for namespace import but rewrites named imports from other consumers", async (t) => {

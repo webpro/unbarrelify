@@ -180,6 +180,7 @@ async function processLocalExport(
       specifier,
       pos,
       exportedNames,
+      exportAll: !node.exportClause,
       reExportedNs: namespace,
       externalSpecifier: specifier.startsWith(".") ? undefined : specifier,
     });
@@ -206,6 +207,7 @@ function processExternalExport(
     specifier,
     pos,
     exportedNames,
+    exportAll: !node.exportClause,
     reExportedNs: namespace,
     externalSpecifier: specifier,
   });
@@ -227,6 +229,10 @@ function mergeExport(exports: ExportMap, path: string, data: ExportMap extends M
     for (const [k, v] of data.aliases) {
       existing.aliases.set(k, v);
     }
+  }
+
+  if (data.exportAll) {
+    existing.exportAll = true;
   }
 
   if (data.exportedAsDefault && !existing.exportedAsDefault) {

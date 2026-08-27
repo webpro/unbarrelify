@@ -228,6 +228,7 @@ test("buildExportMap: maps star re-export to resolved path", async () => {
 
   const exportData = exportMap.get(sourcePath)!;
   assert.equal(exportData.specifier, "./source");
+  assert.equal(exportData.exportAll, true);
   assert.ok(exportData.exportedNames.has("foo"));
   assert.ok(exportData.exportedNames.has("bar"));
 });

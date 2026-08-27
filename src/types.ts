@@ -18,6 +18,7 @@ export interface ExportData {
   specifier: string;
   pos: Position;
   exportedNames: Set<string>;
+  exportAll?: boolean;
   reExportedNs?: string;
   externalSpecifier?: string;
   aliases?: Map<string, string>;
