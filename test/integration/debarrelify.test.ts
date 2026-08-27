@@ -183,6 +183,24 @@ describe("unbarrelify integration tests", () => {
     });
   });
 
+  describe("star-reexport-explicit fixture", () => {
+    test("preserves a curated barrel behind a star re-export", async (t) => {
+      const fixtureDir = await copyFixture(t, "star-reexport-explicit");
+
+      const result = await unbarrelify({
+        cwd: fixtureDir,
+        files: ["**/*.ts"],
+        skip: [],
+        ext: ".js",
+        write: true,
+      });
+
+      const preservedBarrel = result.preserved.find((item) => item.path.endsWith("/index.ts"));
+      assert.equal(preservedBarrel?.reason, "star-reexport");
+      assert.equal(await read(join(fixtureDir, "entry.ts")), 'export * from "./index";\n\nexport const own = true;\n');
+    });
+  });
+
   describe("mixed-imports fixture", () => {
     test("handles mixed import types (named, default, aliased)", async (t) => {
       const fixtureDir = await copyFixture(t, "mixed-imports");

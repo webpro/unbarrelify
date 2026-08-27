@@ -5,6 +5,7 @@ interface BarrelState {
   consumers: Set<string>;
   rewrittenConsumers: Set<string>;
   dynamicConsumers: Set<string>;
+  starConsumers: Set<string>;
 }
 
 export class BarrelTracker {
@@ -17,6 +18,7 @@ export class BarrelTracker {
       consumers: new Set(),
       rewrittenConsumers: new Set(),
       dynamicConsumers: new Set(),
+      starConsumers: new Set(),
     });
     return true;
   }
@@ -38,6 +40,11 @@ export class BarrelTracker {
   addDynamicConsumer(barrelPath: string, consumerPath: string): void {
     const state = this.barrels.get(barrelPath);
     if (state) state.dynamicConsumers.add(consumerPath);
+  }
+
+  addStarConsumer(barrelPath: string, consumerPath: string): void {
+    const state = this.barrels.get(barrelPath);
+    if (state) state.starConsumers.add(consumerPath);
   }
 
   classify(ctx: Context): { deleted: string[]; preserved: PreservedBarrel[] } {
@@ -105,9 +112,14 @@ export class BarrelTracker {
 
     const nonTsConsumers: string[] = [];
     const nsConsumers: string[] = [];
+    const starConsumers: string[] = [];
 
     for (const consumer of state.consumers) {
       if (state.rewrittenConsumers.has(consumer) || toDelete.has(consumer)) continue;
+      if (state.starConsumers.has(consumer)) {
+        starConsumers.push(consumer);
+        continue;
+      }
       const isTs = consumer.endsWith(".ts") || consumer.endsWith(".tsx");
       if (isTs) nsConsumers.push(consumer);
       else nonTsConsumers.push(consumer);
@@ -116,6 +128,7 @@ export class BarrelTracker {
     const results: Array<Omit<PreservedBarrel, "path">> = [];
     if (nonTsConsumers.length > 0) results.push({ reason: "non-ts-import", consumers: nonTsConsumers });
     if (nsConsumers.length > 0) results.push({ reason: "namespace-import", consumers: nsConsumers });
+    if (starConsumers.length > 0) results.push({ reason: "star-reexport", consumers: starConsumers });
     return results;
   }
 }

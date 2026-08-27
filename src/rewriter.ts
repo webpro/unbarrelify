@@ -301,7 +301,8 @@ export async function buildRewrites(analysis: File, filePath: string, ctx: Conte
       }
 
       if (item.type === "export" && item.name === "*") {
-        await buildStarReExportRewrites(item, importedFile.exports, rewrites, ctx);
+        const flattened = await buildStarReExportRewrites(item, importedFile.exports, rewrites, ctx);
+        if (!flattened) ctx.tracker.addStarConsumer(importedFilePath, filePath);
       }
     }
   }
@@ -367,7 +368,9 @@ async function buildStarReExportRewrites(
   exports: ExportMap,
   rewrites: Rewrites,
   ctx: Context,
-): Promise<void> {
+): Promise<boolean> {
+  if (!(await canFlattenStarExports(exports, ctx, new Set()))) return false;
+
   const pos = `${item.pos.start}:${item.pos.end}`;
   let posRewrites = rewrites.get(pos);
   if (!posRewrites) {
@@ -377,6 +380,28 @@ async function buildStarReExportRewrites(
 
   const visited = new Set<string>();
   await traceStarExports(exports, posRewrites, item, ctx, visited);
+  return true;
+}
+
+async function canFlattenStarExports(exports: ExportMap, ctx: Context, visited: Set<string>): Promise<boolean> {
+  for (const [targetFilePath, exportData] of exports) {
+    if (!isAbsolute(targetFilePath) || isIgnoredPath(targetFilePath, ctx.base)) return false;
+    if (
+      !exportData.exportAll ||
+      exportData.aliases ||
+      exportData.exportedAsDefault ||
+      exportData.reExportedNs
+    ) {
+      return false;
+    }
+    if (visited.has(targetFilePath)) continue;
+    visited.add(targetFilePath);
+
+    const targetFile = await analyzeFile(targetFilePath, ctx);
+    if (targetFile.isBarrel && !(await canFlattenStarExports(targetFile.exports, ctx, visited))) return false;
+  }
+
+  return true;
 }
 
 async function traceStarExports(

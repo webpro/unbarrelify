@@ -173,6 +173,7 @@ export async function main(): Promise<void> {
     const namespace = result.preserved.filter((p) => p.reason === "namespace-import");
     const nonTs = result.preserved.filter((p) => p.reason === "non-ts-import");
     const dynamic = result.preserved.filter((p) => p.reason === "dynamic-import");
+    const starReExports = result.preserved.filter((p) => p.reason === "star-reexport");
 
     if (skipped.length > 0) {
       console.error(
@@ -218,6 +219,18 @@ export async function main(): Promise<void> {
           for (const consumer of consumers) {
             console.error(`    └─ ${rel(consumer)}`);
           }
+        }
+      }
+    }
+
+    if (starReExports.length > 0) {
+      console.error(
+        `\n${styleText("cyan", "ℹ")} ${styleText("underline", "Preserved barrel files")} (has curated star re-exports that cannot be flattened safely):`,
+      );
+      for (const { path, consumers } of starReExports) {
+        console.error(`  ${rel(path)}`);
+        for (const consumer of consumers ?? []) {
+          console.error(`    └─ ${rel(consumer)}`);
         }
       }
     }

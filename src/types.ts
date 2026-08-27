@@ -110,7 +110,7 @@ export interface Context {
 
 export interface PreservedBarrel {
   path: string;
-  reason: "skip" | "namespace-import" | "non-ts-import" | "dynamic-import";
+  reason: "skip" | "namespace-import" | "non-ts-import" | "dynamic-import" | "star-reexport";
   consumers: string[];
 }
 
