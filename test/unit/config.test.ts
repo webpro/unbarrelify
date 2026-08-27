@@ -37,8 +37,10 @@ test("initProjectConfig: isPackageEntryPoint returns true for nested workspace p
   const config = initProjectConfig(join(fixturesDir, "package-entry-point"));
   const iconsIndexPath = join(fixturesDir, "package-entry-point/packages/icons/gen/index.ts");
   const iconsUtilsPath = join(fixturesDir, "package-entry-point/packages/icons/gen/utils.ts");
+  const iconsInfoPath = join(fixturesDir, "package-entry-point/packages/icons/src/info.ts");
   assert.ok(config.isPackageEntryPoint(iconsIndexPath));
   assert.ok(config.isPackageEntryPoint(iconsUtilsPath));
+  assert.ok(config.isPackageEntryPoint(iconsInfoPath));
 });
 
 test("tryMapToAlias: returns null for relative specifiers", () => {

@@ -1,4 +1,4 @@
-import { dirname, join, resolve } from "node:path";
+import { dirname, join, relative, resolve, sep } from "node:path";
 import { existsSync, readFileSync } from "node:fs";
 import { globSync } from "tinyglobby";
 import ts from "typescript";
@@ -13,6 +13,8 @@ interface TsConfigDirs {
   outDir?: string;
   rootDir?: string;
 }
+
+const PUBLISHED_OUTPUT_DIRS = new Set(["build", "dist", "lib", "out"]);
 
 export function createEntryPointChecker(): (filePath: string) => boolean {
   const pkgCache = new Map<string, Record<string, unknown> | null>();
@@ -60,7 +62,7 @@ export function createEntryPointChecker(): (filePath: string) => boolean {
   ): void {
     if (typeof exports === "string") {
       if (exports.includes("*")) return;
-      addEntryPoint(resolve(pkgDir, exports), outDir, rootDir, data);
+      addEntryPoint(resolve(pkgDir, exports), pkgDir, outDir, rootDir, data);
       return;
     }
 
@@ -81,10 +83,10 @@ export function createEntryPointChecker(): (filePath: string) => boolean {
       collectExportPaths(pkg.exports, pkgDir, outDir, rootDir, data);
     }
     if (typeof pkg.main === "string") {
-      addEntryPoint(resolve(pkgDir, pkg.main), outDir, rootDir, data);
+      addEntryPoint(resolve(pkgDir, pkg.main), pkgDir, outDir, rootDir, data);
     }
     if (typeof pkg.module === "string") {
-      addEntryPoint(resolve(pkgDir, pkg.module), outDir, rootDir, data);
+      addEntryPoint(resolve(pkgDir, pkg.module), pkgDir, outDir, rootDir, data);
     }
 
     const [indexFile] = globSync(`index.{${EXTENSIONS.join(",")}}`, { cwd: pkgDir });
@@ -128,7 +130,13 @@ function matchesPattern(filePath: string, pattern: string): boolean {
   return pattern === base + ".*";
 }
 
-function addEntryPoint(filePath: string, outDir: string | null, rootDir: string, data: EntryPointData): void {
+function addEntryPoint(
+  filePath: string,
+  pkgDir: string,
+  outDir: string | null,
+  rootDir: string,
+  data: EntryPointData,
+): void {
   data.resolvedPaths.add(filePath);
 
   if (outDir && filePath.startsWith(outDir + "/")) {
@@ -136,5 +144,14 @@ function addEntryPoint(filePath: string, outDir: string | null, rootDir: string,
     const srcPath = join(rootDir, relPath);
     const base = srcPath.replace(JS_EXT_PATTERN, "");
     data.sourcePatterns.add(base + ".*");
+  }
+
+  const [outputDir, ...segments] = relative(pkgDir, filePath).split(sep);
+  if (PUBLISHED_OUTPUT_DIRS.has(outputDir) && segments.length > 0) {
+    const sourcePath = join(pkgDir, "src", ...segments);
+    const base = sourcePath.replace(JS_EXT_PATTERN, "");
+    if (EXTENSIONS.some((extension) => existsSync(`${base}.${extension}`))) {
+      data.sourcePatterns.add(base + ".*");
+    }
   }
 }

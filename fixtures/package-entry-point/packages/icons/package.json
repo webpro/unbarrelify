@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "exports": {
     ".": "./gen/index.ts",
+    "./info": "./dist/info.js",
     "./utils": "./gen/utils.ts"
   }
 }
