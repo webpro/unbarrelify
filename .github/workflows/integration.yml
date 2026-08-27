@@ -33,37 +33,39 @@ jobs:
         project:
           - name: argos
             repo: argos-ci/argos
+            node_version_file: target/.nvmrc
             commands: |
               pnpm install
-              unbarrelify --write
+              node ../dist/cli.js --write
               pnpm build
               pnpm lint
               pnpm check-types
 
           - name: astro
             repo: withastro/astro
+            node_version_file: target/.nvmrc
             commands: |
               pnpm install
               pnpm build
-              unbarrelify --write
+              node ../dist/cli.js --write
               pnpm build
               pnpm biome lint
               pnpm eslint . --report-unused-disable-directives-severity=warn --concurrency=auto
 
           - name: sentry
             repo: getsentry/sentry
+            node_version_file: target/.node-version
             commands: |
-              # prerewrite missing default imports
-              find static/app -name '*.stories.tsx' -exec sed -i 's/import documentation from/import * as documentation from/g' {} +
-              unbarrelify --write
               pnpm install
+              node ../dist/cli.js --write
               pnpm build
 
           - name: ts-api-utils
             repo: JoshuaKGoldberg/ts-api-utils
+            node_version_file: target/.nvmrc
             commands: |
-              unbarrelify --write
               pnpm install
+              node ../dist/cli.js --write
               pnpm build
               pnpm test
 
@@ -75,15 +77,12 @@ jobs:
           path: target
       - uses: actions/setup-node@v4
         with:
-          node-version: 24
+          node-version-file: ${{ matrix.project.node_version_file }}
+      - run: npx --yes pnpm@11.1.3 install --frozen-lockfile
+      - run: npx --yes pnpm@11.1.3 run build
       - uses: pnpm/action-setup@v4
-      - name: Set up pnpm global bin
-        run: |
-          echo "PNPM_HOME=$HOME/.local/share/pnpm" >> "$GITHUB_ENV"
-          echo "$HOME/.local/share/pnpm/bin" >> "$GITHUB_PATH"
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm run build
-      - run: pnpm add -g .
+        with:
+          package_json_file: target/package.json
       - name: unbarrelify ${{ matrix.project.name }}
         working-directory: target
         run: |
