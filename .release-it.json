@@ -1,0 +1,16 @@
+{
+  "$schema": "https://unpkg.com/release-it/schema/release-it.json",
+  "npm": {
+    "stage": true
+  },
+  "github": {
+    "release": true,
+    "releaseNotes": {
+      "commit": "* ${commit.subject} (${sha}){ - thanks @${author.login}!}",
+      "excludeMatches": ["webpro"]
+    },
+    "comments": {
+      "submit": true
+    }
+  }
+}
