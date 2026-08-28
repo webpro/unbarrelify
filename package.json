@@ -42,14 +42,14 @@
     "prepack": "tsc"
   },
   "dependencies": {
-    "oxc-resolver": "^11.19.1",
-    "tinyglobby": "^0.2.16",
+    "oxc-resolver": "^11.24.2",
+    "tinyglobby": "^0.2.17",
     "typescript": "^6.0.3"
   },
   "devDependencies": {
-    "@types/node": "^24.10.9",
-    "oxfmt": "^0.50.0",
-    "oxlint": "^1.65.0"
+    "@types/node": "^26.4.0",
+    "oxfmt": "^0.65.0",
+    "oxlint": "^1.80.0"
   },
   "engines": {
     "node": "^20.19.0 || >=22.12.0"
