@@ -18,7 +18,7 @@ export function initProjectConfig(cwd: string): ProjectConfig {
   const parsed = graph?.root ?? null;
   const tsconfigDir = tsconfigPath ? dirname(tsconfigPath) : null;
 
-  const aliases = parsed && tsconfigDir ? extractPathAliases(parsed, tsconfigDir) : null;
+  const aliases = parsed && tsconfigDir && tsconfigPath ? extractPathAliases(parsed, tsconfigDir, tsconfigPath) : null;
   const files = graph?.files ?? [];
   const explicitFiles = graph?.explicitFiles ?? [];
   const isPackageEntryPoint = createEntryPointChecker();
@@ -77,12 +77,17 @@ function parseTsConfigFile(tsconfigPath: string): ts.ParsedCommandLine | null {
   return ts.parseJsonConfigFileContent(configFile.config, ts.sys, dirname(tsconfigPath));
 }
 
-function extractPathAliases(parsed: ts.ParsedCommandLine, tsconfigDir: string): PathAliases | null {
+function extractPathAliases(
+  parsed: ts.ParsedCommandLine,
+  tsconfigDir: string,
+  tsconfigPath: string,
+): PathAliases | null {
   const paths = parsed.options.paths;
   if (!paths) return null;
 
   return {
     baseUrl: parsed.options.baseUrl ?? tsconfigDir,
+    configFile: tsconfigPath,
     paths,
   };
 }

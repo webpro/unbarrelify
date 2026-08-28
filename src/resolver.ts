@@ -1,11 +1,12 @@
 import { dirname, extname, relative } from "node:path";
 import { realpathSync } from "node:fs";
 import { ResolverFactory } from "oxc-resolver";
+import type { NapiResolveOptions } from "oxc-resolver";
 import { getExtensionFromSpecifier, tryMapToAlias } from "./config.ts";
 import type { PathAliases } from "./types.ts";
 import { JS_EXT_PATTERN, RESOLVER_EXTENSIONS } from "./constants.ts";
 
-const resolver = new ResolverFactory({
+const resolverOptions: NapiResolveOptions = {
   tsconfig: "auto",
   extensions: RESOLVER_EXTENSIONS as unknown as string[],
   conditionNames: ["import", "require", "node", "default"],
@@ -15,7 +16,10 @@ const resolver = new ResolverFactory({
     ".mjs": [".mjs", ".mts"],
     ".cjs": [".cjs", ".cts"],
   },
-});
+};
+
+const resolver = new ResolverFactory(resolverOptions);
+const projectResolvers = new WeakMap<PathAliases, ResolverFactory>();
 
 const realpathCache = new Map<string, string>();
 
@@ -37,21 +41,42 @@ function stripQueryString(specifier: string): string {
   return queryIndex === -1 ? specifier : specifier.slice(0, queryIndex);
 }
 
-export function resolveModule(fromPath: string, specifier: string, _aliases: PathAliases | null): string | undefined {
+export function resolveModule(fromPath: string, specifier: string, aliases: PathAliases | null): string | undefined {
   const cleanSpecifier = stripQueryString(specifier);
   const isRelativeOrAbsolute = cleanSpecifier.startsWith(".") || cleanSpecifier.startsWith("/");
 
   const result = resolver.resolveFileSync(fromPath, cleanSpecifier);
+  const resolvedPath = result?.path ?? resolveWithProjectConfig(fromPath, cleanSpecifier, aliases);
 
-  if (!result?.path) {
+  if (!resolvedPath) {
     return isRelativeOrAbsolute ? undefined : cleanSpecifier;
   }
 
-  if (result.path.includes("node_modules")) {
+  if (resolvedPath.includes("node_modules")) {
     return cleanSpecifier;
   }
 
-  return result.path;
+  return resolvedPath;
+}
+
+function resolveWithProjectConfig(
+  fromPath: string,
+  specifier: string,
+  aliases: PathAliases | null,
+): string | undefined {
+  if (!aliases?.configFile) return undefined;
+
+  let projectResolver = projectResolvers.get(aliases);
+
+  if (!projectResolver) {
+    projectResolver = new ResolverFactory({
+      ...resolverOptions,
+      tsconfig: { configFile: aliases.configFile, references: "auto" },
+    });
+    projectResolvers.set(aliases, projectResolver);
+  }
+
+  return projectResolver.resolveFileSync(fromPath, specifier)?.path;
 }
 
 export function ensureExtension(path: string, ext: string | null): string {

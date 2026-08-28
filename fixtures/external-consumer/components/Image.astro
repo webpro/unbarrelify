@@ -1,5 +1,5 @@
 ---
-import { AstroError, AstroErrorData } from '../src/errors/index.ts';
+import { AstroError, AstroErrorData } from "@fixture/errors";
 
 if (!Astro.props.src) {
   throw new AstroError(AstroErrorData.InvalidConfig);

@@ -31,6 +31,17 @@ describe("resolver", () => {
       assert.equal(result, "oxc-resolver");
     });
 
+    test("resolves path aliases for non-TypeScript importers outside tsconfig include", () => {
+      const fixturePath = join(process.cwd(), "fixtures/external-consumer");
+      const result = resolveModule(join(fixturePath, "components/Image.astro"), "@fixture/errors", {
+        baseUrl: fixturePath,
+        configFile: join(fixturePath, "tsconfig.json"),
+        paths: { "@fixture/*": ["./src/*"] },
+      });
+
+      assert.equal(result, join(fixturePath, "src/errors/index.ts"));
+    });
+
     test("returns undefined for non-existent modules", () => {
       const fromPath = join(process.cwd(), "src/main.ts");
       const result = resolveModule(fromPath, "./non-existent-module", null);

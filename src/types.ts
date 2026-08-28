@@ -70,6 +70,7 @@ export type RewritesByPosition = Array<[[number, number], Map<string, Rewrite>]>
 
 export interface PathAliases {
   baseUrl: string;
+  configFile?: string;
   paths: Record<string, string[]>;
 }
 

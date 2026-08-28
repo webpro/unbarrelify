@@ -4,7 +4,10 @@
     "moduleResolution": "bundler",
     "target": "ESNext",
     "strict": true,
-    "allowArbitraryExtensions": true
+    "allowArbitraryExtensions": true,
+    "paths": {
+      "@fixture/*": ["./src/*"]
+    }
   },
-  "include": ["src/**/*.ts", "components/**/*.astro"]
+  "include": ["src/**/*.ts"]
 }
