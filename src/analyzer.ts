@@ -181,8 +181,8 @@ async function processLocalExport(
       specifier,
       pos,
       exportedNames,
-      exportAll: !node.exportClause,
-      exportAllIsTypeOnly: !node.exportClause ? node.isTypeOnly : undefined,
+      exportStar: !node.exportClause,
+      exportStarIsTypeOnly: !node.exportClause ? node.isTypeOnly : undefined,
       reExportedNs: namespace,
       externalSpecifier: specifier.startsWith(".") ? undefined : specifier,
     });
@@ -209,8 +209,8 @@ function processExternalExport(
     specifier,
     pos,
     exportedNames,
-    exportAll: !node.exportClause,
-    exportAllIsTypeOnly: !node.exportClause ? node.isTypeOnly : undefined,
+    exportStar: !node.exportClause,
+    exportStarIsTypeOnly: !node.exportClause ? node.isTypeOnly : undefined,
     hasNamedExports: Boolean(node.exportClause && ts.isNamedExports(node.exportClause)),
     reExportedNs: namespace,
     externalSpecifier: specifier,
@@ -235,11 +235,11 @@ function mergeExport(exports: ExportMap, path: string, data: ExportMap extends M
     }
   }
 
-  if (data.exportAll) {
-    existing.exportAllIsTypeOnly = existing.exportAll
-      ? Boolean(existing.exportAllIsTypeOnly && data.exportAllIsTypeOnly)
-      : data.exportAllIsTypeOnly;
-    existing.exportAll = true;
+  if (data.exportStar) {
+    existing.exportStarIsTypeOnly = existing.exportStar
+      ? Boolean(existing.exportStarIsTypeOnly && data.exportStarIsTypeOnly)
+      : data.exportStarIsTypeOnly;
+    existing.exportStar = true;
   }
 
   if (data.hasNamedExports) {

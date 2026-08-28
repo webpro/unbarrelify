@@ -170,7 +170,7 @@ async function traceExport(
 
   for (const [targetFilePath, exportItem] of exports) {
     const isExported = isNameExported(name, exportItem);
-    if (!isExported && !exportItem.exportAll) continue;
+    if (!isExported && !exportItem.exportStar) continue;
 
     if (!isAbsolute(targetFilePath)) {
       if (exportItem.exportedNames.size === 0 || exportItem.exportedNames.has(name.name)) {
@@ -387,7 +387,7 @@ async function canFlattenStarExports(exports: ExportMap, ctx: Context, visited: 
   for (const [targetFilePath, exportData] of exports) {
     if (!isAbsolute(targetFilePath) || isIgnoredPath(targetFilePath, ctx.base)) return false;
     if (
-      !exportData.exportAll ||
+      !exportData.exportStar ||
       exportData.hasNamedExports ||
       exportData.aliases ||
       exportData.exportedAsDefault ||
@@ -416,7 +416,7 @@ async function traceStarExports(
   for (const [targetFilePath, exportData] of exports) {
     if (!isAbsolute(targetFilePath)) continue;
     if (isIgnoredPath(targetFilePath, ctx.base)) continue;
-    const isTypeOnly = inheritedTypeOnly || Boolean(exportData.exportAllIsTypeOnly);
+    const isTypeOnly = inheritedTypeOnly || Boolean(exportData.exportStarIsTypeOnly);
     const visitedAsTypeOnly = visited.get(targetFilePath);
     if (visitedAsTypeOnly === false || visitedAsTypeOnly === isTypeOnly) continue;
     visited.set(targetFilePath, isTypeOnly);

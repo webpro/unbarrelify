@@ -18,8 +18,8 @@ export interface ExportData {
   specifier: string;
   pos: Position;
   exportedNames: Set<string>;
-  exportAll?: boolean;
-  exportAllIsTypeOnly?: boolean;
+  exportStar?: boolean;
+  exportStarIsTypeOnly?: boolean;
   hasNamedExports?: boolean;
   reExportedNs?: string;
   externalSpecifier?: string;
